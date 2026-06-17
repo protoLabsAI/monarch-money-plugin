@@ -57,7 +57,7 @@ official endpoint + OAuth instead.)
 |-----------|--------|----------------------------------|---------------------------------------------|
 | `enabled` | bool   | `false`                          | Gate the OAuth-bridge MCP server            |
 | `url`     | string | `https://api.monarch.com/mcp`    | Monarch's MCP endpoint                      |
-| `package` | string | `mcp-remote`                     | npm spec for the bridge (pin a version)     |
+| `package` | string | `mcp-remote@0.1.38`              | pinned npm spec for the bridge; override to bump |
 
 No secret is stored — OAuth tokens live in the bridge's own cache (`~/.mcp-auth`).
 

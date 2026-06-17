@@ -35,7 +35,7 @@ log = logging.getLogger("protoagent.plugins.monarch_money")
 
 CONFIG_SECTION = "monarch_money"
 DEFAULT_MCP_URL = "https://api.monarch.com/mcp"
-DEFAULT_BRIDGE_PKG = "mcp-remote"  # the npm OAuth-bridge package (npx -y <pkg> <url>)
+DEFAULT_BRIDGE_PKG = "mcp-remote@0.1.38"  # pinned npm OAuth-bridge spec (npx -y <pkg> <url>)
 OAUTH_CACHE_DIR = Path.home() / ".mcp-auth"  # where mcp-remote caches OAuth tokens
 
 

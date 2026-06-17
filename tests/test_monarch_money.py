@@ -42,7 +42,7 @@ def test_mcp_factory_builds_stdio_bridge(plugin, monkeypatch):
     assert entry["name"] == "monarch"
     assert entry["transport"] == "stdio"
     assert entry["command"] == "/usr/bin/npx"
-    assert entry["args"] == ["-y", "mcp-remote", "https://api.monarch.com/mcp"]
+    assert entry["args"] == ["-y", "mcp-remote@0.1.38", "https://api.monarch.com/mcp"]  # pinned default
 
 
 def test_mcp_factory_respects_custom_url_and_package(plugin, monkeypatch):

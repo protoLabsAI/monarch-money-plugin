@@ -14,14 +14,14 @@ config_section: monarch_money
 config:
   enabled: false                       # gate the managed OAuth-bridge MCP server
   url: "https://api.monarch.com/mcp"   # Monarch's hosted MCP endpoint (beta)
-  package: "mcp-remote"                # npm spec for the OAuth bridge (pin e.g. mcp-remote@0.1.18)
+  package: "mcp-remote@0.1.38"         # pinned npm spec for the OAuth bridge (override to bump)
 settings:
   - { key: enabled, label: "Enable Monarch Money", type: bool,
       description: "Launch the OAuth bridge and connect the agent to Monarch's MCP server. First connect opens a browser to approve access. Needs Node/npx." }
   - { key: url, label: "MCP server URL", type: string,
       description: "Monarch's hosted MCP endpoint. Leave as the default unless Monarch changes it." }
   - { key: package, label: "OAuth bridge package", type: string,
-      description: "The npm package npx runs to bridge the remote OAuth server to stdio. Pin a version (e.g. mcp-remote@0.1.18) for reproducibility." }
+      description: "The npm package npx runs to bridge the remote OAuth server to stdio. Pinned to mcp-remote@0.1.38; change to bump the bridge version." }
 
 # Console view (ADR 0026/0038) — a sandboxed iframe of the page this plugin serves.
 views:
