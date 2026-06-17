@@ -1,0 +1,31 @@
+id: monarch-money
+name: Monarch Money
+version: 0.1.0
+description: >-
+  Personal-finance tools via Monarch Money's official MCP server (beta) — accounts,
+  balances, transactions, budgets. The agent connects to Monarch's hosted MCP
+  endpoint with a bearer token you paste into Settings.
+enabled: false                 # author default; operators opt in via plugins.enabled
+repository: https://github.com/protoLabsAI/monarch-money-plugin
+
+# Config / secrets / Settings (ADR 0019) — claims the top-level `monarch_money` section.
+config_section: monarch_money
+config:
+  enabled: false               # gate the managed MCP server (also needs a token)
+  url: "https://api.monarch.com/mcp"   # Monarch's hosted MCP endpoint (beta)
+secrets: [token]               # Monarch API token → secrets.yaml, redacted in the UI
+settings:
+  - { key: enabled, label: "Enable Monarch Money", type: bool,
+      description: "Connect the agent to Monarch's MCP server. Also needs the API token below." }
+  - { key: token, label: "Monarch API token", type: secret,
+      description: "Your Monarch token (Authorization: Token …). MFA accounts: see the plugin skill. Stored in secrets.yaml." }
+  - { key: url, label: "MCP server URL", type: string,
+      description: "Monarch's hosted MCP endpoint. Leave as the default unless Monarch changes it." }
+
+# Console view (ADR 0026/0038) — a sandboxed iframe of the page this plugin serves.
+views:
+  - { id: main, label: "Monarch Money", icon: Wallet, path: /plugins/monarch-money/view }
+
+# Event bus (ADR 0039) — none yet; declare topics here if this plugin starts broadcasting.
+# emits: []
+# subscribes: []
