@@ -1,31 +1,42 @@
 """Monarch Money — personal finance via the official Monarch MCP server (beta).
 
-The integration is a **managed MCP server** (ADR 0017/0019) the agent connects to:
-Monarch hosts a remote MCP endpoint (``https://api.monarch.com/mcp``) that exposes
-accounts, balances, transactions, and budget tools. This plugin is the *wiring* —
-it builds the server entry from config and lets the host connect to it, so a fork
-gets Monarch's finance tools without a single core edit.
+The official endpoint (``https://api.monarch.com/mcp``) authenticates with **OAuth**,
+not a static key: on first connect you approve access in your browser, and access is
+managed/revoked under Monarch → Settings → Integrations. protoAgent's MCP client only
+speaks static-header auth to a remote ``streamable_http`` server, so we don't point at
+the endpoint directly. Instead we launch the **``mcp-remote`` OAuth bridge** as a
+managed **stdio** MCP server: it runs the browser OAuth flow once, caches the tokens
+locally (``~/.mcp-auth``), and proxies the remote server over stdio — which protoAgent
+*does* support (structurally the same as how the Google plugin runs a subprocess).
 
 Contributes:
-- a **managed MCP server** (``register_mcp_server``) — a remote streamable-HTTP
-  server, authed with a static bearer **token**; started only once a token is set
-  and the plugin is enabled (else the factory returns ``None`` and nothing connects);
+- a **managed MCP server** (``register_mcp_server``) — ``npx -y mcp-remote <url>`` over
+  stdio; started only when the connector is enabled (and ``npx`` is on PATH), else the
+  factory returns ``None`` and nothing connects. Monarch's tools then appear to the
+  agent namespaced as ``monarch__*``;
 - a **console view** (left-rail dashboard) showing connection status + onboarding;
-- a gated **status route** (``GET /api/plugins/monarch-money/status``) the view reads —
-  it returns booleans only and **never** echoes the token.
+- a gated **status route** (``GET /api/plugins/monarch-money/status``) the view reads.
 
-Config/secrets/Settings come from the manifest (ADR 0019): the ``monarch_money``
-section holds ``enabled`` (bool), ``url`` (the MCP endpoint), and the ``token`` secret.
+Config/Settings come from the manifest (ADR 0019): the ``monarch_money`` section holds
+``enabled`` (bool), ``url`` (the MCP endpoint), and ``package`` (the bridge's npm spec).
+There is **no secret** — OAuth tokens live in the bridge's own cache, not our config.
+
+Requires **Node/npx** on the host (for ``mcp-remote``). The first connect opens a
+browser, so an operator must be present to approve it once.
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
+from pathlib import Path
 
 log = logging.getLogger("protoagent.plugins.monarch_money")
 
 CONFIG_SECTION = "monarch_money"
 DEFAULT_MCP_URL = "https://api.monarch.com/mcp"
+DEFAULT_BRIDGE_PKG = "mcp-remote"  # the npm OAuth-bridge package (npx -y <pkg> <url>)
+OAUTH_CACHE_DIR = Path.home() / ".mcp-auth"  # where mcp-remote caches OAuth tokens
 
 
 def _mcfg(config) -> dict:
@@ -34,30 +45,38 @@ def _mcfg(config) -> dict:
 
 
 def _server_factory(config) -> dict | None:
-    """Build the managed Monarch MCP server entry, or ``None`` when off / no token.
+    """Build the managed Monarch MCP server entry, or ``None`` when off / no npx.
 
-    Called at every graph build with the live config. Monarch's MCP is a *remote*
-    streamable-HTTP endpoint, so unlike a stdio plugin there's no subprocess — just
-    a URL and a bearer header. The token is the operator's Monarch API token (from
-    Settings → stored in secrets.yaml); see the bundled skill for how to obtain it
-    (and the MFA caveat). Returning ``None`` keeps MCP from connecting a server that
-    would only error on every call.
+    Called at every graph build with the live config. We don't connect to the OAuth
+    endpoint directly — we launch the ``mcp-remote`` bridge over **stdio**; it performs
+    the OAuth browser flow on first connect and proxies the remote server. Returning
+    ``None`` keeps MCP from launching a bridge the operator hasn't opted into (or that
+    can't run because Node/``npx`` is missing).
     """
     m = _mcfg(config)
     if not m.get("enabled"):
         return None
-    token = (m.get("token") or "").strip()
-    if not token:
-        log.info("[monarch-money] enabled but no API token set — server not started")
+    npx = shutil.which("npx")
+    if not npx:
+        log.warning("[monarch-money] enabled but `npx` not found on PATH — install Node to use the OAuth bridge")
         return None
     url = (m.get("url") or "").strip() or DEFAULT_MCP_URL
+    pkg = (m.get("package") or "").strip() or DEFAULT_BRIDGE_PKG
     return {
         "name": "monarch",
         "enabled": True,
-        "transport": "streamable_http",
-        "url": url,
-        "headers": {"Authorization": f"Bearer {token}"},
+        "transport": "stdio",
+        "command": npx,
+        "args": ["-y", pkg, url],
     }
+
+
+def _has_oauth_cache() -> bool:
+    """Best-effort: has the bridge cached OAuth tokens (i.e. authorized at least once)?"""
+    try:
+        return OAUTH_CACHE_DIR.is_dir() and any(OAUTH_CACHE_DIR.iterdir())
+    except OSError:
+        return False
 
 
 def _status_payload(host) -> dict:
@@ -65,11 +84,12 @@ def _status_payload(host) -> dict:
     cfg = host.config() if host and getattr(host, "config", None) else None
     m = _mcfg(cfg)
     enabled = bool(m.get("enabled"))
-    has_token = bool((m.get("token") or "").strip())
+    npx_available = shutil.which("npx") is not None
     return {
         "enabled": enabled,
-        "configured": has_token,
-        "connected": enabled and has_token,
+        "npx_available": npx_available,
+        "authorized": _has_oauth_cache(),
+        "connected": enabled and npx_available,
         "url": (m.get("url") or "").strip() or DEFAULT_MCP_URL,
     }
 
@@ -82,7 +102,7 @@ def _build_data_router(host):
 
     @router.get("/status")
     async def _status():
-        """Whether the Monarch connector is enabled + has a token. Never returns the token."""
+        """Whether the Monarch connector is enabled, npx is present, and OAuth is cached."""
         return _status_payload(host)
 
     return router
@@ -133,6 +153,7 @@ _VIEW_HTML = """<!doctype html>
   .sub { color: var(--pl-color-fg-muted); font-size: 13px; margin: 0 0 22px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pl-color-fg-muted); }
   .dot.ok { background: var(--pl-color-status-success, #3fb950); }
+  .dot.warn { background: var(--pl-color-status-warning, #d29922); }
   .dot.off { background: var(--pl-color-status-error, #f85149); }
   .card { border: var(--pl-border-width) solid var(--pl-color-border);
     border-radius: var(--pl-radius); background: var(--pl-color-bg-raised);
@@ -148,7 +169,7 @@ _VIEW_HTML = """<!doctype html>
 </head>
 <body>
   <h1><span id="dot" class="dot"></span> Monarch Money</h1>
-  <p class="sub">Personal finance over Monarch's official MCP server (beta).</p>
+  <p class="sub">Personal finance over Monarch's official MCP server (beta), via OAuth.</p>
 
   <div class="card">
     <h2>Connection</h2>
@@ -182,18 +203,22 @@ _VIEW_HTML = """<!doctype html>
       const res = await kit.apiFetch("/api/plugins/monarch-money/status");
       if (!res.ok) throw new Error(res.status + " " + res.statusText);
       const s = await res.json();
-      if (s.connected) {
-        dot.className = "dot ok";
-        state.textContent = "Connected";
-        hint.innerHTML = "Monarch MCP is live at <code>" + s.url + "</code>. The agent can query your finances.";
-      } else if (s.enabled && !s.configured) {
-        dot.className = "dot off";
-        state.textContent = "No token";
-        hint.innerHTML = "Plugin is enabled but no API token is set. Add it in <b>Settings → Monarch Money</b>.";
-      } else {
+      if (!s.enabled) {
         dot.className = "dot off";
         state.textContent = "Disabled";
-        hint.innerHTML = "Enable the plugin and add your Monarch API token in <b>Settings → Monarch Money</b>.";
+        hint.innerHTML = "Enable the connector in <b>Settings → Monarch Money</b>.";
+      } else if (!s.npx_available) {
+        dot.className = "dot off";
+        state.textContent = "Node required";
+        hint.innerHTML = "Enabled, but <code>npx</code> isn't on PATH. Install <b>Node.js</b> so the OAuth bridge (<code>mcp-remote</code>) can run.";
+      } else if (!s.authorized) {
+        dot.className = "dot warn";
+        state.textContent = "Authorize in browser";
+        hint.innerHTML = "Enabled. On first connect a browser opens to approve access at <code>" + s.url + "</code>. Manage/revoke under Monarch → Settings → Integrations.";
+      } else {
+        dot.className = "dot ok";
+        state.textContent = "Connected";
+        hint.innerHTML = "Authorized via OAuth at <code>" + s.url + "</code>. The agent can query your finances.";
       }
     } catch (err) {
       dot.className = "dot off";

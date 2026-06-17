@@ -8,13 +8,21 @@ budgets — read-only.
 ## What it contributes
 
 - **A managed MCP server** — the plugin connects the agent to Monarch's hosted MCP
-  endpoint (`https://api.monarch.com/mcp`), authed with a bearer token. Monarch's
-  tools then appear to the agent namespaced as `monarch__…` (e.g.
-  `monarch__get_accounts`). No subprocess, no `credentials.json` — just a token.
+  endpoint (`https://api.monarch.com/mcp`) via **OAuth**. Because protoAgent's MCP
+  client speaks only static-header auth to a remote server, the plugin instead launches
+  the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) **OAuth bridge** as a
+  managed **stdio** server (`npx -y mcp-remote <url>`): it runs the browser OAuth flow
+  once, caches the tokens (`~/.mcp-auth`), and proxies the remote server. Monarch's
+  tools then appear to the agent namespaced as `monarch__…` (e.g. `monarch__get_accounts`).
 - **A console view** — a left-rail "Monarch Money" dashboard showing connection
   status and example prompts.
 - **A skill** — `skills/monarch-money/SKILL.md`, telling the agent when and how to
   use the Monarch tools (and the auth caveats).
+
+## Requirements
+
+- **Node.js / `npx`** on the host (to run the `mcp-remote` bridge).
+- An operator present at a browser for the **one-time OAuth approval** on first connect.
 
 ## Install & enable
 
@@ -25,29 +33,33 @@ python -m server plugin install https://github.com/protoLabsAI/monarch-money-plu
 
 Then, in **Settings → Monarch Money**:
 
-1. Toggle **Enable Monarch Money** on.
-2. Paste your **Monarch API token** (stored in `secrets.yaml`, never tracked).
-3. Save — the managed MCP server connects live; the rail view shows **Connected**.
+1. Toggle **Enable Monarch Money** on and save.
+2. On first connect a **browser opens** — sign in to Monarch and approve access. You
+   never paste a key or password.
+3. The rail view walks the state: Disabled → Node required → **Authorize in browser** →
+   **Connected**.
+
+Manage or revoke access later in the Monarch app under **Settings → Integrations**.
 
 **install ≠ enable ≠ trust.** Installing only fetches code; enabling runs it
 in-process with the agent's privileges. Only enable plugins you trust.
 
-### Getting your token
+### Why OAuth, not an API key
 
-Open the Monarch web app → DevTools (F12) → **Application → Local Storage** and copy
-the `token` value (or grab the `Authorization: Token …` header from any API request
-in the Network tab). Monarch's **MCP Connector** help article also issues a key.
-
-**MFA accounts:** Monarch needs the raw **Base32 secret** (the seed from authenticator
-setup), not a rotating 6-digit code.
+Monarch's official MCP connector authenticates via **OAuth** — there is no API key in
+the Monarch UI to copy. (The "token from DevTools → Local Storage" trick belongs to
+*unofficial* community servers that hit Monarch's private API; this plugin uses the
+official endpoint + OAuth instead.)
 
 ## Config
 
-| Key       | Type   | Default                          | Notes                                  |
-|-----------|--------|----------------------------------|----------------------------------------|
-| `enabled` | bool   | `false`                          | Gate the MCP server (also needs token) |
-| `token`   | secret | —                                | Monarch API token → `secrets.yaml`     |
-| `url`     | string | `https://api.monarch.com/mcp`    | Monarch's MCP endpoint                 |
+| Key       | Type   | Default                          | Notes                                       |
+|-----------|--------|----------------------------------|---------------------------------------------|
+| `enabled` | bool   | `false`                          | Gate the OAuth-bridge MCP server            |
+| `url`     | string | `https://api.monarch.com/mcp`    | Monarch's MCP endpoint                      |
+| `package` | string | `mcp-remote`                     | npm spec for the bridge (pin a version)     |
+
+No secret is stored — OAuth tokens live in the bridge's own cache (`~/.mcp-auth`).
 
 ## Develop
 

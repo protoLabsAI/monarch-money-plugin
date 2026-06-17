@@ -1,26 +1,27 @@
 id: monarch-money
 name: Monarch Money
-version: 0.1.0
+version: 0.2.0
 description: >-
   Personal-finance tools via Monarch Money's official MCP server (beta) — accounts,
-  balances, transactions, budgets. The agent connects to Monarch's hosted MCP
-  endpoint with a bearer token you paste into Settings.
+  balances, transactions, budgets. Authenticates with Monarch's OAuth flow through the
+  `mcp-remote` bridge (run over stdio); no API key to paste. Requires Node/npx.
 enabled: false                 # author default; operators opt in via plugins.enabled
 repository: https://github.com/protoLabsAI/monarch-money-plugin
 
-# Config / secrets / Settings (ADR 0019) — claims the top-level `monarch_money` section.
+# Config / Settings (ADR 0019) — claims the top-level `monarch_money` section.
+# No secrets: OAuth tokens are cached by the mcp-remote bridge (~/.mcp-auth), not here.
 config_section: monarch_money
 config:
-  enabled: false               # gate the managed MCP server (also needs a token)
+  enabled: false                       # gate the managed OAuth-bridge MCP server
   url: "https://api.monarch.com/mcp"   # Monarch's hosted MCP endpoint (beta)
-secrets: [token]               # Monarch API token → secrets.yaml, redacted in the UI
+  package: "mcp-remote"                # npm spec for the OAuth bridge (pin e.g. mcp-remote@0.1.18)
 settings:
   - { key: enabled, label: "Enable Monarch Money", type: bool,
-      description: "Connect the agent to Monarch's MCP server. Also needs the API token below." }
-  - { key: token, label: "Monarch API token", type: secret,
-      description: "Your Monarch token (Authorization: Token …). MFA accounts: see the plugin skill. Stored in secrets.yaml." }
+      description: "Launch the OAuth bridge and connect the agent to Monarch's MCP server. First connect opens a browser to approve access. Needs Node/npx." }
   - { key: url, label: "MCP server URL", type: string,
       description: "Monarch's hosted MCP endpoint. Leave as the default unless Monarch changes it." }
+  - { key: package, label: "OAuth bridge package", type: string,
+      description: "The npm package npx runs to bridge the remote OAuth server to stdio. Pin a version (e.g. mcp-remote@0.1.18) for reproducibility." }
 
 # Console view (ADR 0026/0038) — a sandboxed iframe of the page this plugin serves.
 views:
