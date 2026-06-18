@@ -24,10 +24,14 @@ balances and net worth, account inventories, transactions and spending breakdown
 budgets vs. actuals, cash flow, or recurring/subscription bills.
 
 ## How to answer
-1. **Check the tools are present.** If no `monarch__*` tools are bound, the connector
-   isn't live — tell the user to enable the plugin in **Settings → Monarch Money** and
-   complete the browser OAuth approval (the rail view shows connection status). Don't
-   guess figures.
+1. **Authorize once, first.** Before calling **any** `monarch__*` tool, call
+   **`monarch_ensure_authorized`** and await it. If access is already authorized it returns
+   immediately; otherwise it opens a **single** browser tab and blocks until you approve.
+   This is what stops a burst of `monarch__*` calls from each popping their own auth tab — so
+   **do not fan out `monarch__*` calls until this returns success.** If it reports a timeout,
+   tell the user to finish the approval in the open tab, then call it again. (If no
+   `monarch__*` tools are bound at all, the connector isn't enabled — tell the user to turn
+   it on in **Settings → Monarch Money**.) Don't guess figures.
 2. **Pick the narrowest tool** for the question (accounts vs. transactions vs. budgets)
    and pass concrete filters — date ranges, category, merchant, account — so you pull
    only what you need rather than dumping the whole ledger into context.
@@ -41,6 +45,9 @@ budgets vs. actuals, cash flow, or recurring/subscription bills.
   `mcp-remote` bridge (over stdio) which runs Monarch's OAuth flow: on first connect a
   **browser opens** to approve access. Tokens are cached by the bridge (`~/.mcp-auth`),
   then refreshed automatically.
+- **One approval, not one per call.** Prefer `monarch_ensure_authorized` to establish auth
+  up front; it primes the cached token once. Token *expiry* never reopens the browser — the
+  bridge refreshes silently. A browser only reopens on first connect or a revoked grant.
 - To connect: enable the plugin in **Settings → Monarch Money**, then complete the
   browser approval that pops up. The rail view shows the connection state
   (Disabled → Node required → Authorize in browser → Connected).
