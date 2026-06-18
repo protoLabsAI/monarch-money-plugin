@@ -11,9 +11,14 @@ budgets — read-only.
   endpoint (`https://api.monarch.com/mcp`) via **OAuth**. Because protoAgent's MCP
   client speaks only static-header auth to a remote server, the plugin instead launches
   the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) **OAuth bridge** as a
-  managed **stdio** server (`npx -y mcp-remote <url>`): it runs the browser OAuth flow
-  once, caches the tokens (`~/.mcp-auth`), and proxies the remote server. Monarch's
+  managed **stdio** server (`npx -y mcp-remote <url> <port>`): it runs the browser OAuth
+  flow once, caches the tokens (`~/.mcp-auth`), and proxies the remote server. Monarch's
   tools then appear to the agent namespaced as `monarch__…` (e.g. `monarch__get_accounts`).
+- **A pre-auth gate tool** (`monarch_ensure_authorized`) — the agent calls this *first*,
+  before any `monarch__…` tool, to establish OAuth **once**: it returns immediately if a
+  token is cached, otherwise opens a **single** browser tab and blocks until approval is
+  cached. This stops a burst of tool calls from each opening their own auth tab; together
+  with a **fixed OAuth callback port** the user approves access exactly once.
 - **A console view** — a left-rail "Monarch Money" dashboard showing connection
   status and example prompts.
 - **A skill** — `skills/monarch-money/SKILL.md`, telling the agent when and how to
@@ -55,9 +60,11 @@ official endpoint + OAuth instead.)
 
 | Key       | Type   | Default                          | Notes                                       |
 |-----------|--------|----------------------------------|---------------------------------------------|
-| `enabled` | bool   | `false`                          | Gate the OAuth-bridge MCP server            |
-| `url`     | string | `https://api.monarch.com/mcp`    | Monarch's MCP endpoint                      |
-| `package` | string | `mcp-remote@0.1.38`              | pinned npm spec for the bridge; override to bump |
+| `enabled`       | bool | `false`                       | Gate the OAuth-bridge MCP server            |
+| `url`           | string | `https://api.monarch.com/mcp` | Monarch's MCP endpoint                    |
+| `package`       | string | `mcp-remote@0.1.38`         | pinned npm spec for the bridge; override to bump |
+| `callback_port` | int  | `33418`                       | fixed OAuth redirect port → one browser approval, not one per call |
+| `auth_timeout`  | int  | `180`                         | seconds the pre-auth gate waits for browser approval |
 
 No secret is stored — OAuth tokens live in the bridge's own cache (`~/.mcp-auth`).
 

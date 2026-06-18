@@ -1,6 +1,6 @@
 id: monarch-money
 name: Monarch Money
-version: 0.2.0
+version: 0.3.0
 description: >-
   Personal-finance tools via Monarch Money's official MCP server (beta) — accounts,
   balances, transactions, budgets. Authenticates with Monarch's OAuth flow through the
@@ -15,6 +15,8 @@ config:
   enabled: false                       # gate the managed OAuth-bridge MCP server
   url: "https://api.monarch.com/mcp"   # Monarch's hosted MCP endpoint (beta)
   package: "mcp-remote@0.1.38"         # pinned npm spec for the OAuth bridge (override to bump)
+  callback_port: 33418                 # fixed OAuth redirect port → one browser tab, not one per call
+  auth_timeout: 180                    # seconds the pre-auth gate waits for the browser approval
 settings:
   - { key: enabled, label: "Enable Monarch Money", type: bool,
       description: "Launch the OAuth bridge and connect the agent to Monarch's MCP server. First connect opens a browser to approve access. Needs Node/npx." }
@@ -22,6 +24,10 @@ settings:
       description: "Monarch's hosted MCP endpoint. Leave as the default unless Monarch changes it." }
   - { key: package, label: "OAuth bridge package", type: string,
       description: "The npm package npx runs to bridge the remote OAuth server to stdio. Pinned to mcp-remote@0.1.38; change to bump the bridge version." }
+  - { key: callback_port, label: "OAuth callback port", type: int,
+      description: "Fixed localhost port mcp-remote listens on for the OAuth redirect. A fixed port lets concurrent connects share one browser approval instead of opening a tab each. Change only if 33418 clashes with another service." }
+  - { key: auth_timeout, label: "Authorization timeout (s)", type: int,
+      description: "How long the agent's pre-auth step waits for you to approve access in the browser before giving up. Raise it if approvals take longer." }
 
 # Console view (ADR 0026/0038) — a sandboxed iframe of the page this plugin serves.
 views:
